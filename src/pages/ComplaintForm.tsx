@@ -1,0 +1,364 @@
+import React, { useState, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { 
+  Card, 
+  CardHeader, 
+  CardTitle, 
+  CardDescription, 
+  CardContent, 
+  CardFooter 
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import Logo from '@/components/Logo';
+import NavBar from '@/components/NavBar';
+import { ArrowLeft, Flag, Image, MapPin, Upload, AlertTriangle, CheckCircle } from 'lucide-react';
+
+const getCurrentDate = () => {
+  const today = new Date();
+  return today.toISOString().split('T')[0];
+};
+
+const getStoredComplaints = () => {
+  const storedComplaints = localStorage.getItem('complaints');
+  return storedComplaints ? JSON.parse(storedComplaints) : [];
+};
+
+const ComplaintForm = () => {
+  const [location, setLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [loadingLocation, setLoadingLocation] = useState(false);
+  const [formData, setFormData] = useState({
+    description: '',
+    risk: 'low',
+    category: 'road', // Default category
+  });
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
+  const handleFormChange = (e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+  };
+
+  const handleRadioChange = (value: string) => {
+    setFormData({
+      ...formData,
+      risk: value
+    });
+  };
+
+  const handleCategoryChange = (value: string) => {
+    setFormData({
+      ...formData,
+      category: value
+    });
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedImage(file);
+      
+      // Create preview URL
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleGetLocation = () => {
+    setLoadingLocation(true);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setLocation({ lat: latitude, lng: longitude });
+          setLoadingLocation(false);
+          toast({
+            title: "Location detected",
+            description: `Latitude: ${latitude.toFixed(6)}, Longitude: ${longitude.toFixed(6)}`,
+          });
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          setLoadingLocation(false);
+          toast({
+            variant: "destructive",
+            title: "Location error",
+            description: "Unable to retrieve your location. Please try again or enter it manually.",
+          });
+        }
+      );
+    } else {
+      setLoadingLocation(false);
+      toast({
+        variant: "destructive",
+        title: "Geolocation not supported",
+        description: "Your browser doesn't support geolocation services.",
+      });
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validation
+    if (!formData.description.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Missing description",
+        description: "Please provide a description of your complaint.",
+      });
+      return;
+    }
+
+    if (!selectedImage) {
+      toast({
+        variant: "destructive",
+        title: "Missing image",
+        description: "Please upload an image related to your complaint.",
+      });
+      return;
+    }
+
+    if (!location) {
+      toast({
+        variant: "destructive",
+        title: "Missing location",
+        description: "Please share your location to continue.",
+      });
+      return;
+    }
+
+    // Get existing complaints from localStorage
+    const existingComplaints = getStoredComplaints();
+    
+    // Create a new complaint object
+    const newComplaint = {
+      id: Date.now(), // Use timestamp as a simple ID
+      description: formData.description,
+      image: imagePreview || "https://placehold.co/600x400/png", // Use the imagePreview URL
+      location: location,
+      user: "Current User", // In a real app, this would be the logged-in user
+      date: getCurrentDate(),
+      likes: 0,
+      likedBy: [],
+      comments: [],
+      risk: formData.risk as "high" | "low",
+      category: formData.category as "electricity" | "road" | "cleanliness",
+    };
+    
+    // Save to localStorage
+    const updatedComplaints = [...existingComplaints, newComplaint];
+    localStorage.setItem('complaints', JSON.stringify(updatedComplaints));
+    
+    toast({
+      title: "Complaint submitted successfully!",
+      description: "Your complaint has been recorded and will be reviewed by local authorities.",
+    });
+
+    // Reset form
+    setFormData({ description: '', risk: 'low', category: 'road' });
+    setSelectedImage(null);
+    setImagePreview(null);
+    setLocation(null);
+    
+    // Navigate to reported issues page
+    setTimeout(() => {
+      navigate('/issues/reported');
+    }, 2000);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Header */}
+      <NavBar />
+
+      {/* Form Content */}
+      <div className="flex-grow p-6 md:p-8 flex justify-center items-start">
+        <Card className="w-full max-w-2xl animate-fade-in-up">
+          <CardHeader>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="h-8 w-8 rounded-full bg-gradient-to-r from-civilink-purple/20 to-civilink-red/20 flex items-center justify-center">
+                <Flag className="h-4 w-4 text-civilink-purple" />
+              </div>
+              <CardTitle>Submit a Complaint</CardTitle>
+            </div>
+            <CardDescription>
+              Please provide details about your complaint. Include a description, an image, your location, and the severity level.
+            </CardDescription>
+          </CardHeader>
+          <form onSubmit={handleSubmit}>
+            <CardContent className="space-y-6">
+              {/* Description Field */}
+              <div className="space-y-2">
+                <Label htmlFor="description">
+                  Description <span className="text-destructive">*</span>
+                </Label>
+                <Textarea 
+                  id="description"
+                  name="description"
+                  placeholder="Please describe your complaint in detail..."
+                  value={formData.description}
+                  onChange={handleFormChange}
+                  rows={5}
+                  className="resize-none"
+                />
+              </div>
+              
+              {/* Category Selection */}
+              <div className="space-y-2">
+                <Label>
+                  Category <span className="text-destructive">*</span>
+                </Label>
+                <RadioGroup 
+                  value={formData.category} 
+                  onValueChange={handleCategoryChange}
+                  className="flex flex-col space-y-1"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="electricity" id="electricity" />
+                    <Label htmlFor="electricity" className="cursor-pointer">Electricity</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="road" id="road" />
+                    <Label htmlFor="road" className="cursor-pointer">Road</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="cleanliness" id="cleanliness" />
+                    <Label htmlFor="cleanliness" className="cursor-pointer">Cleanliness</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+              
+              {/* Risk Assessment */}
+              <div className="space-y-2">
+                <Label>
+                  Risk Level <span className="text-destructive">*</span>
+                </Label>
+                <RadioGroup 
+                  value={formData.risk} 
+                  onValueChange={handleRadioChange}
+                  className="flex space-x-4"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="high" id="high-risk" />
+                    <Label htmlFor="high-risk" className="cursor-pointer flex items-center gap-1">
+                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      High Risk
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="low" id="low-risk" />
+                    <Label htmlFor="low-risk" className="cursor-pointer flex items-center gap-1">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      Low Risk
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+              
+              {/* Image Upload */}
+              <div className="space-y-2">
+                <Label htmlFor="image">
+                  Upload Image <span className="text-destructive">*</span>
+                </Label>
+                <div 
+                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:bg-accent/50 transition-colors
+                    ${imagePreview ? 'border-primary/50' : 'border-muted'}`}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    id="image"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="hidden"
+                  />
+                  
+                  {imagePreview ? (
+                    <div className="space-y-4">
+                      <img 
+                        src={imagePreview} 
+                        alt="Preview" 
+                        className="mx-auto max-h-60 rounded-md shadow-sm" 
+                      />
+                      <p className="text-sm text-muted-foreground flex items-center justify-center gap-1">
+                        <Image className="h-4 w-4" />
+                        Click to change image
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <Upload className="h-10 w-10 text-muted-foreground mb-2" />
+                      <p className="font-medium">Click to upload an image</p>
+                      <p className="text-sm text-muted-foreground">SVG, PNG, JPG or GIF (max. 10MB)</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Location */}
+              <div className="space-y-2">
+                <Label>
+                  Your Location <span className="text-destructive">*</span>
+                </Label>
+                <div className="border rounded-lg p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-5 w-5 text-muted-foreground" />
+                      <span className="text-sm">
+                        {location 
+                          ? `Lat: ${location.lat.toFixed(6)}, Lng: ${location.lng.toFixed(6)}` 
+                          : "No location detected"}
+                      </span>
+                    </div>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={handleGetLocation}
+                      disabled={loadingLocation}
+                    >
+                      {loadingLocation ? "Detecting..." : "Get Current Location"}
+                    </Button>
+                  </div>
+                  {location && (
+                    <div className="h-40 bg-muted rounded-md flex items-center justify-center">
+                      <p className="text-sm text-muted-foreground">
+                        Location data captured successfully
+                      </p>
+                      {/* A map would typically be displayed here */}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-end gap-2">
+              <Link to="/">
+                <Button type="button" variant="outline">Cancel</Button>
+              </Link>
+              <Button type="submit" className="bg-gradient-to-r from-civilink-purple to-civilink-red hover:opacity-90 transition-opacity">
+                Submit Complaint
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+export default ComplaintForm;
